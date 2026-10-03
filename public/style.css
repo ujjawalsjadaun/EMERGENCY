@@ -62,3 +62,13 @@ body.cmd .map{background:#17202b}body.cmd .map text{fill:#9fb0c8}
 .mic{flex:0;padding:6px 10px}.mic.on{background:var(--critical)}
 .ticker div{padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
 .gauge{font-size:56px;font-weight:800;line-height:1}
+@keyframes flash{from{background:color-mix(in srgb,var(--brand) 35%,transparent)}to{background:transparent}}
+tr.flash{animation:flash 1.6s ease-out}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.card,.kpi{animation:rise .45s ease-out both}
+.kpi b{font-variant-numeric:tabular-nums}
+header{background-image:linear-gradient(120deg,var(--brand),#7a5af8)}
+body.cmd header{background-image:none}
+.card{transition:box-shadow .2s}.card:hover{box-shadow:0 6px 22px #0002}
+button{transition:transform .1s,filter .15s}button:hover{filter:brightness(1.1)}button:active{transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

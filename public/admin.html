@@ -14,7 +14,10 @@
     <div class="card"><h2>Campus map <label style="display:inline;font-weight:400"><input type="checkbox" id="heat" style="width:auto"> heatmap</label></h2>
       <svg id="map" class="map" style="cursor:default" viewBox="0 0 100 70"></svg>
       <div class="row" style="margin-top:8px"><button class="sec" id="play" style="flex:0">▶ Replay</button><input type="range" id="tl" min="0" max="1000" value="1000"><span id="tlt" class="muted" style="flex:0;white-space:nowrap">Live</span></div></div>
-    <div class="card"><h2>Analytics</h2><div id="charts"></div></div>
+    <div class="card"><h2>Live analytics</h2>
+      <div style="height:170px"><canvas id="chCat"></canvas></div>
+      <div style="height:150px;margin-top:10px"><canvas id="chDay"></canvas></div>
+      <div style="height:150px;margin-top:10px"><canvas id="chRes"></canvas></div></div>
   </div>
   <div class="card">
     <h2>Reported issues</h2>
@@ -25,6 +28,7 @@
   <div class="card hidden" id="detail"></div>
 </div>
 </main>
+<script src="vendor/chart.umd.min.js"></script>
 <script src="common.js"></script>
 <script>
 let meta, all = [], sel = null, es, sirenOn = true, replayT = null;
@@ -65,11 +69,13 @@ async function load() {
   all = list; renderStats(st); render();
 }
 const filtered = () => all.filter(i => (!$("#fc").value || i.category === $("#fc").value) && (!$("#fp").value || i.priority === $("#fp").value) && (!$("#fs").value || i.status === $("#fs").value));
+const seen = {};
 function render() {
-  $("#rows").innerHTML = filtered().map(i => `<tr class="click ${i.sos && i.status !== "Resolved" ? "sos" : ""}" data-id="${i.id}"><td>${i.sos ? "🆘 " : ""}${i.id}</td><td>${EMOJI[i.category]} ${esc(i.category)}</td>
+  $("#rows").innerHTML = filtered().map(i => `<tr class="click ${i.sos && i.status !== "Resolved" ? "sos" : ""} ${seen[i.id] !== undefined && seen[i.id] !== i.updated ? "flash" : seen[i.id] === undefined && Object.keys(seen).length ? "flash" : ""}" data-id="${i.id}"><td>${i.sos ? "🆘 " : ""}${i.id}</td><td>${EMOJI[i.category]} ${esc(i.category)}</td>
     <td><span class="badge b-${i.priority}">${i.priority}</span></td><td><span class="badge st st-${i.status}">${i.status}</span></td>
     <td>${i.slaDue ? `<span class="sla" data-due="${i.slaDue}"></span>` : "-"}</td>
     <td>${esc(i.location)}</td><td>${i.votes}</td><td class="muted">${fmt(i.created)}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">No issues match.</td></tr>`;
+  all.forEach(i => seen[i.id] = i.updated);
   drawMap(); tickSla(); if (sel) renderDetail();
 }
 function tickSla() {
@@ -94,15 +100,30 @@ $("#play").onclick = () => {
   playing = setInterval(() => { $("#tl").value = +$("#tl").value + 8; $("#tl").oninput(); if (+$("#tl").value >= 1000) { clearInterval(playing); playing = null; $("#play").textContent = "▶ Replay"; } }, 100);
 };
 
+const kpiPrev = {};
+function countUp(el, to, suffix) {   // animate a KPI from its previous value to the new one
+  const from = kpiPrev[el.dataset.k] || 0; kpiPrev[el.dataset.k] = to; const t0 = performance.now();
+  const step = t => { const p = Math.min(1, (t - t0) / 600); el.textContent = Math.round(from + (to - from) * p) + suffix; if (p < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+const charts = {};
+function chart(id, type, labels, data, colors, opts = {}) {   // create once, then update in place so changes animate
+  if (charts[id]) { charts[id].data.labels = labels; charts[id].data.datasets[0].data = data; charts[id].update(); return; }
+  charts[id] = new Chart($("#" + id), {type, data:{labels, datasets:[{data, backgroundColor:colors, borderColor:colors, borderWidth: type === "line" ? 2 : 0, tension:.35, fill: type === "line"}]},
+    options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:type === "doughnut", position:"right", labels:{color:"#9aa4b8", boxWidth:10}}, title:{display:true, text:opts.title, color:"#9aa4b8"}},
+      scales: type === "doughnut" ? {} : {x:{ticks:{color:"#9aa4b8"},grid:{display:false}}, y:{beginAtZero:true, ticks:{color:"#9aa4b8", precision:0}, grid:{color:"#2a3142"}}}}});
+}
 function renderStats(s) {
   const crit = all.filter(i => i.priority === "Critical" && i.status !== "Resolved").length;
-  $("#kpis").innerHTML = [["Total", s.total], ["Open", s.open], ["Critical open", crit], ["SOS alerts", s.sos], ["Resolved", s.byStatus.Resolved],
-    ["Avg response", s.avgResponseMinutes == null ? "-" : s.avgResponseMinutes + " min"], ["Avg resolution", s.avgResolutionHours == null ? "-" : s.avgResolutionHours + " h"]]
-    .map(([k, v]) => `<div class="kpi"><b>${v}</b><span class="muted">${k}</span></div>`).join("");
-  const bars = (title, o, fmtv = v => v) => { const m = Math.max(1, ...Object.values(o).map(v => v || 0));
-    return `<h3 style="margin:10px 0 4px;font-size:14px">${title}</h3>` + Object.entries(o).map(([k, v]) =>
-      `<div class="bar"><span class="l">${esc(k)}</span><i style="width:${(v||0)/m*55}%"></i>${v == null ? "-" : fmtv(v)}</div>`).join(""); };
-  $("#charts").innerHTML = bars("By category", s.byCategory) + bars("By priority", s.byPriority) + bars("Avg hours to resolve", s.avgResolutionByCategory, v => v + "h");
+  const kpis = [["Total", s.total, ""], ["Open", s.open, ""], ["Critical open", crit, ""], ["SOS alerts", s.sos, ""], ["Resolved", s.byStatus.Resolved, ""],
+    ["Avg response", s.avgResponseMinutes, " min"], ["Avg resolution", s.avgResolutionHours, " h"]];
+  if (!$("#kpis").children.length) $("#kpis").innerHTML = kpis.map(([k]) => `<div class="kpi"><b data-k="${k}">0</b><span class="muted">${k}</span></div>`).join("");
+  kpis.forEach(([k, v, suf]) => { const el = $(`#kpis b[data-k="${k}"]`); if (v == null) el.textContent = "-"; else countUp(el, v, suf); });
+  const cats = Object.keys(s.byCategory);
+  chart("chCat", "doughnut", cats.map(c => EMOJI[c] + " " + c), Object.values(s.byCategory), ["#e5484d", "#f5a524", "#3e63dd", "#7a5af8", "#2e9e6b", "#8b8d98"], {title:"Reports by category"});
+  chart("chDay", "line", Object.keys(s.perDay).map(d => d.slice(5)), Object.values(s.perDay), "#6c8cff", {title:"Reports per day"});
+  const rc = cats.filter(c => s.avgResolutionByCategory[c] != null);
+  chart("chRes", "bar", rc, rc.map(c => s.avgResolutionByCategory[c]), "#2e9e6b", {title:"Avg hours to resolve"});
 }
 
 function renderDetail() {
