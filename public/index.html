@@ -1,0 +1,194 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Campus Assist - Report an issue</title><link rel="stylesheet" href="style.css"></head><body>
+<header><h1>🆘 Campus Assist</h1><a class="on" href="/">Report</a><a href="#track">Track</a><a href="/board.html">Campus Pulse</a><a href="/admin.html">Authority login</a></header>
+<main>
+<div class="card sos-wrap" id="sosCard">
+  <button id="sos" type="button">SOS</button>
+  <p style="margin:12px 0 0"><b>Press and hold for 1.5 seconds</b> to alert responders instantly.<br>
+  <span class="muted">Sends a Critical alert with your location. No form needed. You can add details afterwards.</span></p>
+</div>
+
+<form class="card" id="form">
+  <h2>Or report a problem</h2>
+  <label>Describe what happened <button type="button" class="mic sec" id="mic" title="Dictate">🎤</button></label>
+  <textarea id="desc" required minlength="5" placeholder="e.g. Student fainted near the library, not responding"></textarea>
+  <div id="ai" class="hint hidden"></div>
+
+  <label>Category</label><div class="cats" id="cats"></div>
+  <label>Priority</label><div class="pris" id="pris"></div>
+
+  <label>Location - tap the map or type it</label>
+  <svg id="map" class="map" viewBox="0 0 100 70"></svg>
+  <input id="loc" required placeholder="e.g. Hostel A, 2nd floor corridor" style="margin-top:8px">
+  <div id="similar" class="similar hidden"></div>
+
+  <div class="row"><div><label>Your name (optional)</label><input id="name"></div>
+  <div><label>Phone / email (optional)</label><input id="contact"></div></div>
+
+  <label>Photo (optional)</label><input type="file" id="img" accept="image/*">
+  <img id="prev" class="thumb hidden">
+  <p class="err" id="err"></p>
+  <button id="go">Submit report</button>
+</form>
+
+<div class="card hidden" id="done"></div>
+
+<div class="card" id="track">
+  <h2>Track a complaint</h2>
+  <div class="row"><input id="tid" placeholder="Complaint ID e.g. CMP-260101-A1B2"><button id="tbtn" style="flex:0">Track</button></div>
+  <p class="err" id="terr"></p><div id="tres"></div>
+</div>
+</main>
+<script src="common.js"></script>
+<script>
+let cat = null, pri = null, pt = null, imgData = null, priTouched = false, catTouched = false, es = null, cur = null;
+const meta = {categories:["Medical","Electrical","Infrastructure","Security","Lost & Found","Other"], priorities:["Low","Medium","High","Critical"]};
+const catsEl = $("#cats"), prisEl = $("#pris"), map = $("#map");
+function renderOpts() {
+  catsEl.innerHTML = meta.categories.map(c => `<div class="opt ${c===cat?"sel":""}" data-c="${esc(c)}"><span class="e">${EMOJI[c]}</span>${esc(c)}</div>`).join("");
+  prisEl.innerHTML = meta.priorities.map(p => `<div class="opt ${p===pri?"sel":""}" data-p="${p}"><span class="badge b-${p}">${p}</span></div>`).join("");
+}
+catsEl.onclick = e => { const o = e.target.closest(".opt"); if (o) { cat = o.dataset.c; catTouched = true; renderOpts(); similar(); } };
+prisEl.onclick = e => { const o = e.target.closest(".opt"); if (o) { pri = o.dataset.p; priTouched = true; renderOpts(); } };
+renderOpts();
+
+function drawMap() { map.innerHTML = mapSVG(pt ? [{...pt, priority: pri || "Medium", id:"you", category:"", status:""}] : []); }
+drawMap();
+map.onclick = e => { pt = svgPoint(map, e); $("#loc").value = nearestZone(pt.x, pt.y) + " (near)"; drawMap(); similar(); };
+
+// --- SOS: hold to send ---
+const sos = $("#sos"); let holdT = null, holdStart = 0, raf = 0;
+function sosStart(e) {
+  e.preventDefault(); holdStart = performance.now(); sos.classList.add("hold");
+  const tick = () => { const p = Math.min(1, (performance.now() - holdStart) / 1500); sos.style.setProperty("--p", p * 100 + "%");
+    if (p >= 1) { sosCancel(); sendSOS(); } else raf = requestAnimationFrame(tick); };
+  raf = requestAnimationFrame(tick);
+}
+function sosCancel() { cancelAnimationFrame(raf); sos.classList.remove("hold"); sos.style.setProperty("--p", "0%"); }
+["pointerdown"].forEach(ev => sos.addEventListener(ev, sosStart));
+["pointerup","pointerleave","pointercancel"].forEach(ev => sos.addEventListener(ev, sosCancel));
+sos.oncontextmenu = e => e.preventDefault();
+async function sendSOS() {
+  navigator.vibrate && navigator.vibrate(200);
+  sos.textContent = "…";
+  const gps = await new Promise(res => navigator.geolocation ? navigator.geolocation.getCurrentPosition(
+    p => res(`GPS ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`), () => res(null), {timeout:3500}) : res(null));
+  const near = pt ? nearestZone(pt.x, pt.y) + " (near)" : null;
+  try {
+    const r = await api("/api/issues", {method:"POST", body:{sos:true, location: [near, gps].filter(Boolean).join(" · ") || "", x:pt?.x, y:pt?.y,
+      reporter:$("#name").value, contact:$("#contact").value}});
+    localStorage.setItem("lastId", r.id); sos.textContent = "SENT";
+    $("#sosCard").innerHTML = `<h2>🚨 SOS sent - help is being alerted</h2><h1 style="margin:4px 0">${r.id}</h1>
+      <p>Stay where you are if it is safe. Tell responders what is happening:</p>
+      <div class="row">${["Medical emergency","Fire / electrical danger","I feel unsafe / being followed","Someone else needs help"].map(t => `<button class="sec" style="flex:1 1 40%" data-q="${t}">${t}</button>`).join("")}</div>`;
+    $("#sosCard").onclick = e => { const q = e.target.dataset?.q; if (q) { sendMsg(r.id, q); e.target.disabled = true; } };
+    $("#tid").value = r.id; track();
+  } catch (x) { sos.textContent = "SOS"; alert("Could not send SOS: " + x.message + "\nCall campus security directly."); }
+}
+
+// --- voice dictation ---
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) $("#mic").style.display = "none"; else {
+  const rec = new SR(); rec.lang = "en-IN"; rec.interimResults = false; let on = false;
+  rec.onresult = e => { $("#desc").value += (($("#desc").value ? " " : "") + e.results[0][0].transcript); $("#desc").dispatchEvent(new Event("input")); };
+  rec.onend = () => { on = false; $("#mic").classList.remove("on"); };
+  $("#mic").onclick = () => { if (on) return rec.stop(); on = true; $("#mic").classList.add("on"); try { rec.start(); } catch {} };
+}
+
+// --- AI-style auto categorisation ---
+let tmr;
+$("#desc").oninput = () => { clearTimeout(tmr); tmr = setTimeout(async () => {
+  const d = $("#desc").value.trim(); if (d.length < 8) return;
+  try {
+    const s = await api("/api/suggest", {method:"POST", body:{description:d}});
+    if (!catTouched) cat = s.category; if (!priTouched) pri = s.priority;
+    renderOpts(); drawMap(); similar();
+    const h = $("#ai"); h.classList.remove("hidden");
+    h.innerHTML = `🤖 Suggested: <b>${EMOJI[s.category]} ${esc(s.category)}</b> · <b>${s.priority}</b> priority - you can change this.`;
+  } catch {}
+}, 500); };
+
+// --- duplicate detection: "me too" instead of a new report ---
+async function similar() {
+  const box = $("#similar"); if (!pt) return box.classList.add("hidden");
+  const list = await api(`/api/similar?x=${pt.x}&y=${pt.y}&category=${encodeURIComponent(cat || "")}`).catch(() => []);
+  if (!list.length) return box.classList.add("hidden");
+  box.classList.remove("hidden");
+  box.innerHTML = `<b>⚠️ Already reported nearby?</b> <span class="muted">Add your voice instead of a duplicate - more reports raise priority.</span>` +
+    list.map(i => `<div class="row"><span style="flex:3">${EMOJI[i.category]} ${esc(i.description)} <span class="muted">· ${i.status} · 👥 ${i.votes}</span></span>
+    <button class="sec" data-v="${i.id}">Me too</button></div>`).join("");
+}
+$("#similar").onclick = async e => {
+  const id = e.target.dataset?.v; if (!id) return;
+  const r = await api(`/api/issues/${id}/vote`, {method:"POST", body:{client:clientId}});
+  toast(r.already ? "You already backed this report" : "Thanks - your report was added to " + id);
+  $("#tid").value = id; track(); $("#track").scrollIntoView({behavior:"smooth"});
+};
+
+$("#img").onchange = e => {
+  const f = e.target.files[0]; if (!f) { imgData = null; $("#prev").classList.add("hidden"); return; }
+  const im = new Image(); im.onload = () => {
+    const s = Math.min(1, 1280 / Math.max(im.width, im.height)), c = document.createElement("canvas");
+    c.width = im.width * s; c.height = im.height * s; c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+    imgData = c.toDataURL("image/jpeg", .82); $("#prev").src = imgData; $("#prev").classList.remove("hidden");
+  }; im.src = URL.createObjectURL(f);
+};
+
+$("#form").onsubmit = async e => {
+  e.preventDefault(); $("#err").textContent = "";
+  if (!cat || !pri) return $("#err").textContent = "Please choose a category and priority.";
+  $("#go").disabled = true;
+  try {
+    const r = await api("/api/issues", {method:"POST", body:{category:cat, priority:pri, description:$("#desc").value, location:$("#loc").value,
+      x:pt?.x, y:pt?.y, reporter:$("#name").value, contact:$("#contact").value, image:imgData}});
+    localStorage.setItem("lastId", r.id);
+    $("#form").classList.add("hidden"); $("#sosCard").classList.add("hidden");
+    const d = $("#done"); d.classList.remove("hidden");
+    d.innerHTML = `<h2>✅ Report submitted</h2><p>Your complaint ID:</p><h1 style="margin:4px 0;letter-spacing:1px">${r.id}</h1>
+      <p class="muted">Save this ID. You can track it below at any time.</p><button onclick="location.reload()" class="sec">File another</button>`;
+    $("#tid").value = r.id; track(); scrollTo({top:document.body.scrollHeight, behavior:"smooth"});
+  } catch (x) { $("#err").textContent = x.message; } finally { $("#go").disabled = false; }
+};
+
+// --- tracking ---
+const STEPS = ["Reported","Assigned","In Progress","Resolved"];
+async function sendMsg(id, text) { await api(`/api/issues/${id}/messages`, {method:"POST", body:{text}}); }
+function renderTrack(i) {
+  cur = i;
+  const draft = $("#msgIn")?.value || "", focus = document.activeElement?.id === "msgIn", idx = STEPS.indexOf(i.status);
+  $("#tres").innerHTML = `<div class="row" style="margin-top:12px"><h3 style="margin:0">${i.id} ${i.sos ? "🚨" : ""}</h3>
+    <span><span class="badge b-${i.priority}">${i.priority}</span> <span class="badge st st-${i.status}">${i.status}</span></span></div>
+    <div class="steps">${STEPS.map((s,k) => `<div class="${k<=idx?"done":""}">${s}</div>`).join("")}</div>
+    ${i.slaDue ? `<p class="hint">⏱ Responders must acknowledge within <span class="sla" id="sla"></span> - otherwise this is escalated automatically.</p>` : ""}
+    <p><b>${EMOJI[i.category]} ${esc(i.category)}</b> at ${esc(i.location)}<br>${esc(i.description)}</p>
+    ${i.image ? `<img class="thumb" src="${esc(i.image)}">` : ""}
+    <p class="muted">👥 ${i.votes} report${i.votes > 1 ? "s" : ""} · Handled by: ${esc(i.assignee || i.department || "pending")} · Last update ${fmt(i.updated)}</p>
+    <h4 style="margin:14px 0 0">💬 Chat with responders</h4>${chatHTML(i.messages, "student")}
+    <div class="row"><input id="msgIn" placeholder="Send an update or ask a question…"><button id="msgBtn" style="flex:0">Send</button></div>
+    <h4 style="margin:14px 0 6px">Timeline</h4>${timeline(i.history)}`;
+  const inp = $("#msgIn"); inp.value = draft; if (focus) inp.focus();
+  const send = async () => { const t = inp.value.trim(); if (t) { inp.value = ""; await sendMsg(i.id, t); } };
+  $("#msgBtn").onclick = send; inp.onkeydown = e => e.key === "Enter" && send();
+  const c = $(".chat"); if (c) c.scrollTop = c.scrollHeight;
+}
+setInterval(() => { const el = $("#sla"); if (!el || !cur?.slaDue) return; const left = cur.slaDue - Date.now() / 1000; el.textContent = left > 0 ? mmss(left) : "any moment now"; }, 500);
+
+async function track() {
+  const id = $("#tid").value.trim().toUpperCase(); $("#terr").textContent = ""; if (!id) return;
+  try {
+    renderTrack(await api("/api/issues/" + encodeURIComponent(id)));
+    if (es) es.close();
+    es = new EventSource("/api/events?id=" + encodeURIComponent(id));
+    es.addEventListener("updated", ev => {
+      const n = JSON.parse(ev.data), old = cur; renderTrack(n);
+      if (old && n.status !== old.status) toast(`${n.id} is now: ${n.status}`);
+      else if (old && n.messages.length > old.messages.length && n.messages.at(-1).from === "authority") toast("💬 New message from responders");
+      else if (old && n.priority !== old.priority) toast(`${n.id} priority is now ${n.priority}`);
+    });
+  } catch (x) { $("#tres").innerHTML = ""; $("#terr").textContent = x.message; }
+}
+$("#tbtn").onclick = track; $("#tid").onkeydown = e => e.key === "Enter" && track();
+if (window.Notification && Notification.permission === "default") Notification.requestPermission();
+const q = new URLSearchParams(location.search).get("id") || localStorage.getItem("lastId");
+if (q) { $("#tid").value = q; track(); }
+</script></body></html>
