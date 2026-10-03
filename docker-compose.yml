@@ -1,0 +1,16 @@
+# Optional: a standard PostgreSQL instead of the embedded one.
+#   docker compose up -d
+#   DATABASE_URL=postgres://campus:campus@localhost:5432/campus   (put this in .env.local)
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: campus
+      POSTGRES_PASSWORD: campus
+      POSTGRES_DB: campus
+    ports:
+      - "5432:5432"
+    volumes:
+      - campus-pgdata:/var/lib/postgresql/data
+volumes:
+  campus-pgdata:
