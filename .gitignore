@@ -1,0 +1,5 @@
+campus.db
+uploads/*
+!uploads/.gitkeep
+__pycache__/
+*.log
