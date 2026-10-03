@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* Class-based dark mode (toggle + system default, see ThemeScript in layout.tsx) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #f5f6fb;
+  --card: #ffffff;
+  --foreground: #161b2e;
+  --muted: #6b7390;
+  --line: #e6e8f2;
+  --brand: #5b5bf0;
+  --brand2: #8b5cf6;
+  --soft: color-mix(in srgb, #5b5bf0 9%, transparent);
+  --shadow: 0 1px 2px #1b1f3a0d, 0 8px 24px #1b1f3a10;
+  --shadow-lg: 0 2px 4px #1b1f3a12, 0 18px 44px #1b1f3a22;
+  --map-bg: #e8f0f6;
+  --zone: #ffffffbf;
+  --zone-line: #b9c3d6;
+  --zone-text: #4a5576;
+  --road: #dbe2ed;
+}
+
+.dark {
+  --background: #0b0e1d;
+  --card: #141830;
+  --foreground: #e9ecf8;
+  --muted: #98a1c0;
+  --line: #252b49;
+  --brand: #7c7cff;
+  --brand2: #a78bfa;
+  --soft: color-mix(in srgb, #7c7cff 14%, transparent);
+  --shadow: 0 1px 2px #0006, 0 8px 24px #0004;
+  --shadow-lg: 0 2px 4px #0006, 0 18px 44px #0008;
+  --map-bg: #0e1427;
+  --zone: #ffffff10;
+  --zone-line: #38416a;
+  --zone-text: #9aa6cc;
+  --road: #1c2442;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand2: var(--brand2);
+  --color-soft: var(--soft);
+  --color-low: #16a37a;
+  --color-medium: #e0a100;
+  --color-high: #ee6c1a;
+  --color-critical: #e5383b;
+  --font-sans: var(--font-geist-sans), "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --shadow-card: var(--shadow);
+  --shadow-lift: var(--shadow-lg);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(900px 480px at 8% -10%, color-mix(in srgb, var(--brand2) 16%, transparent), transparent 60%),
+    radial-gradient(800px 460px at 100% 0, color-mix(in srgb, var(--brand) 14%, transparent), transparent 55%),
+    var(--background);
+  background-attachment: fixed;
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--brand);
+  color: #fff;
+}
+
+/* ---------- reusable utilities ---------- */
+@utility bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--brand), var(--brand2));
+}
+@utility text-brand-gradient {
+  background-image: linear-gradient(120deg, var(--brand), var(--brand2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@utility glass {
+  background: color-mix(in srgb, var(--card) 76%, transparent);
+  backdrop-filter: blur(14px) saturate(1.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+}
+
+/* Map theming (SVG elements are styled by class so they follow light/dark) */
+.map-bg { fill: var(--map-bg); }
+.map-zone { fill: var(--zone); stroke: var(--zone-line); stroke-width: 0.3; }
+.map-zone-text { fill: var(--zone-text); font-weight: 600; }
+.map-road { stroke: var(--road); }
+
+/* Hold-to-send progress ring around the SOS button */
+.sos-ring {
+  background: conic-gradient(#fff var(--p, 0%), transparent 0);
+  -webkit-mask: radial-gradient(circle, transparent 66%, #000 67%);
+  mask: radial-gradient(circle, transparent 66%, #000 67%);
+}
+
+@keyframes flash-row {
+  from { background: color-mix(in srgb, var(--brand) 35%, transparent); }
+  to { background: transparent; }
+}
+.flash-row { animation: flash-row 1.8s ease-out; }
+
+@keyframes blink { 50% { opacity: 0.3; } }
+.blink { animation: blink 1s infinite; }
+
+@keyframes ping-soft {
+  70% { box-shadow: 0 0 0 7px #e5383b00; }
+  100% { box-shadow: 0 0 0 0 #e5383b00; }
+}
+.badge-critical { box-shadow: 0 0 0 0 #e5383b88; animation: ping-soft 2s infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
