@@ -22,14 +22,14 @@ function toast(msg) {
   if (window.Notification && Notification.permission === "granted") try { new Notification("Campus Assist", {body: msg}); } catch {}
 }
 function mapSVG(pins=[], {heat=false}={}) {
-  const zones = ZONES.map(z => `<rect x="${z.x-z.w/2}" y="${z.y-z.h/2}" width="${z.w}" height="${z.h}" rx="1.5" fill="#fff8" stroke="#8a9a80" stroke-width=".3"/>
-    <text x="${z.x}" y="${z.y+.8}" font-size="2.2" text-anchor="middle" fill="#445">${z.n}</text>`).join("");
-  const road = `<path d="M50 70V0M0 36H100" stroke="#cfd5c4" stroke-width="2.5" fill="none"/>`;
+  const zones = ZONES.map(z => `<rect x="${z.x-z.w/2}" y="${z.y-z.h/2}" width="${z.w}" height="${z.h}" rx="1.5" class="z" stroke-width=".3"/>
+    <text x="${z.x}" y="${z.y+.8}" font-size="2.2" text-anchor="middle" class="zt">${z.n}</text>`).join("");
+  const road = `<path d="M50 70V0M0 36H100" class="rd" stroke-width="2.5" fill="none"/>`;
   const W = {Low:.5, Medium:.8, High:1.1, Critical:1.5};
   const items = pins.filter(p => p.x != null).map(p => heat
     ? `<circle cx="${p.x}" cy="${p.y}" r="${7*(W[p.priority]||1)}" fill="url(#h)"/>`
     : `${p.sos || p.priority === "Critical" ? `<circle cx="${p.x}" cy="${p.y}" r="1.7" fill="none" stroke="${COLORS.Critical}" stroke-width=".4"><animate attributeName="r" values="1.7;6" dur="1.4s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;0" dur="1.4s" repeatCount="indefinite"/></circle>` : ""}
-       <circle cx="${p.x}" cy="${p.y}" r="1.7" fill="${COLORS[p.priority]||"#2f5bea"}" stroke="#fff" stroke-width=".4"><title>${esc(p.id)} ${esc(p.category)} - ${esc(p.status)}</title></circle>`).join("");
+       <circle cx="${p.x}" cy="${p.y}" r="1.7" fill="${COLORS[p.priority]||"#2f5bea"}" stroke="var(--card)" stroke-width=".5"><title>${esc(p.id)} ${esc(p.category)} - ${esc(p.status)}</title></circle>`).join("");
   return `<defs><radialGradient id="h"><stop offset="0" stop-color="#d92d20" stop-opacity=".4"/><stop offset="1" stop-color="#d92d20" stop-opacity="0"/></radialGradient></defs>${road}${zones}${items}`;
 }
 function nearestZone(x, y) {
