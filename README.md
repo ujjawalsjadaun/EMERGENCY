@@ -41,7 +41,7 @@ and tracking.
 ## Architecture
 ```
 server.py          HTTP API + SSE + SQLite storage + SLA escalation thread (Python stdlib only)
-public/            Static frontend (vanilla JS, no build step)
+public/            Static frontend (vanilla JS + vendored Chart.js / confetti, no build step)
   index.html       student: SOS, report, track, chat
   admin.html       authority dashboard
   board.html       public anonymous live board
@@ -62,4 +62,8 @@ tests/test_api.py  end-to-end API tests
 - No rate limiting. SMS/push delivery isn't implemented (browser notifications only).
 
 ## Credits
-No third-party libraries. Browser APIs: EventSource, Web Speech API, Geolocation, Web Audio.
+Backend: Python standard library only. Frontend libraries are vendored in `public/vendor/` (no CDN, works offline, nothing to install):
+- [Chart.js](https://www.chartjs.org) 4.4.7 (MIT) - live analytics charts on the dashboard
+- [canvas-confetti](https://github.com/catdad/canvas-confetti) 1.9.3 (ISC) - small celebration when a student's issue is resolved
+
+Browser APIs: EventSource, Web Speech API, Geolocation, Web Audio.

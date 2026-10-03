@@ -39,6 +39,7 @@
   <p class="err" id="terr"></p><div id="tres"></div>
 </div>
 </main>
+<script src="vendor/confetti.browser.min.js"></script>
 <script src="common.js"></script>
 <script>
 let cat = null, pri = null, pt = null, imgData = null, priTouched = false, catTouched = false, es = null, cur = null;
@@ -182,6 +183,7 @@ async function track() {
     es.addEventListener("updated", ev => {
       const n = JSON.parse(ev.data), old = cur; renderTrack(n);
       if (old && n.status !== old.status) toast(`${n.id} is now: ${n.status}`);
+      if (old && n.status === "Resolved" && old.status !== "Resolved" && window.confetti) confetti({particleCount:140, spread:80, origin:{y:.7}});
       else if (old && n.messages.length > old.messages.length && n.messages.at(-1).from === "authority") toast("💬 New message from responders");
       else if (old && n.priority !== old.priority) toast(`${n.id} priority is now ${n.priority}`);
     });
